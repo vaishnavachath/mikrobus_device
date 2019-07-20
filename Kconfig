@@ -1,0 +1,3 @@
+menuconfig MIKROBUS_DEVICE
+	tristate "Module for instantiating devices on the mikroBUS"
+	depends on GREYBUS
