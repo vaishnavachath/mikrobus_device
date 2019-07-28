@@ -43,32 +43,34 @@ static struct mikrobus_i2c_device devices[] = {
 		.name = "rtc6",
 		.i2c = &(struct i2c_board_info) {
 			I2C_BOARD_INFO("mcp7941x", 0x6f),
+			.irq=-1,
 		}
 	},
 	{
 		.name = "weather",
 		.i2c = &(struct i2c_board_info) {
 			I2C_BOARD_INFO("bme280", 0x76),
+			.irq=-1,
 		}
 	},
 	{
 		.name = "mpu9dof",
 		.i2c = &(struct i2c_board_info) {
 			I2C_BOARD_INFO("mpu9150", 0x68),
-			.irq=-1,
+			.irq=1,
 		}
 	},
 	{
 		.name = "techlab_accel",
 		.i2c = &(struct i2c_board_info) {
 			I2C_BOARD_INFO("mma8453", 0x1c),
-			.irq=-1,
+			.irq=1,
 		}
 	},
 };
 
 #ifdef MODULE
-static int mikrobus_i2c_device_register(struct i2c_board_info *i2c)
+static int mikrobus_i2c_device_register(struct i2c_board_info *i2c, uint8_t bus)
 {
 	struct i2c_adapter *i2c_adap;
 
@@ -88,7 +90,7 @@ static int mikrobus_i2c_device_register(struct i2c_board_info *i2c)
 	return 0;
 }
 #else
-static int mikrobus_i2c_device_register(struct i2c_board_info *i2c)
+static int mikrobus_i2c_device_register(struct i2c_board_info *i2c, uint8_t bus)
 {
 	return i2c_register_board_info(1,i2c, 1);
 }
@@ -97,6 +99,7 @@ static int mikrobus_i2c_device_register(struct i2c_board_info *i2c)
 static int __init mikrobus_i2c_device_init(void)
 {
 	struct i2c_board_info *i2c = NULL;
+	struct mikrobus_port *m_port = NULL;
 	bool found = false;
 	int i = 0;
 	int ret = 0;
@@ -110,11 +113,24 @@ static int __init mikrobus_i2c_device_init(void)
 #endif
 	}
 
+if (!port) {
+#ifdef MODULE
+		pr_err("missing module parameter: 'port'\n");
+		return -EINVAL;
+#else
+		return 0;
+#endif
+	}
+
+	m_port=get_mikrobus_port(port);
+
 	for (i = 0; i < ARRAY_SIZE(devices); i++) {
 		if (strncmp(name, devices[i].name, I2C_NAME_SIZE) == 0) {
 			if (devices[i].i2c) {
 				i2c = devices[i].i2c;
-				ret = mikrobus_i2c_device_register(i2c);
+				if(i2c->irq)
+					i2c->irq=gpio_to_irq(m_port->int_gpio);
+				ret = mikrobus_i2c_device_register(i2c,m_port->i2c_bus);
 				if (ret) {
 					pr_err("failed to register I2C device\n");
 					return ret;

@@ -18,4 +18,4 @@
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
 
-#endif /* __LINUX_MIKROBUS_SPI_H */
+#endif /* __LINUX_MIKROBUS_I2C_H */

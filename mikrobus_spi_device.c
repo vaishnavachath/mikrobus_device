@@ -46,7 +46,8 @@ static struct mikrobus_spi_device devices[] = {
 			.max_speed_hz = 6000000,
 			.mode = SPI_MODE_0,
 			.chip_select = 0,
-			.bus_num = 1,
+			.bus_num = 0,
+			.irq=-1,
 			.platform_data = &(struct fbtft_platform_data) {
 				.bgr = false,
 				.rotate = 0,
@@ -71,7 +72,8 @@ static struct mikrobus_spi_device devices[] = {
 			.max_speed_hz = 6000000,
 			.mode = SPI_MODE_0,
 			.chip_select = 0,
-			.bus_num = 1,
+			.bus_num = 0,			
+			.irq=-1,
 			.platform_data = &(struct fbtft_platform_data) {
 				.bgr = false,
 				.rotate = 0,
@@ -96,7 +98,8 @@ static struct mikrobus_spi_device devices[] = {
 			.max_speed_hz = 6000000,
 			.mode = SPI_MODE_0,
 			.chip_select = 0,
-			.bus_num = 1,
+			.bus_num = 0,
+			.irq=-1,
 			.platform_data = &(struct mmc_spi_platform_data) {
 				.cd_gpio = 59,
 				.ocr_mask= 0x00100000|0x00200000,
@@ -110,8 +113,8 @@ static struct mikrobus_spi_device devices[] = {
 			.max_speed_hz = 16000000,
 			.mode = SPI_MODE_0,
 			.chip_select = 0,
-			.bus_num = 1,
-			.irq=-1,
+			.bus_num = 0,
+			.irq=1,
 		}
 	},
 };
@@ -159,6 +162,7 @@ static int mikrobus_spi_device_spi_device_register(struct spi_board_info *spi)
 static int __init mikrobus_spi_device_init(void)
 {
 	struct spi_board_info *spi = NULL;
+	struct mikrobus_port *m_port = NULL;
 	bool found = false;
 	int i = 0;
 	int ret = 0;
@@ -172,10 +176,25 @@ static int __init mikrobus_spi_device_init(void)
 #endif
 	}
 
+	if (!port) {
+#ifdef MODULE
+		pr_err("missing module parameter: 'port'\n");
+		return -EINVAL;
+#else
+		return 0;
+#endif
+	}
+
+	m_port=get_mikrobus_port(port);
+
 	for (i = 0; i < ARRAY_SIZE(devices); i++) {
 		if (strncmp(name, devices[i].name, SPI_NAME_SIZE) == 0) {
 			if (devices[i].spi) {
 				spi = devices[i].spi;
+				spi->bus_num= m_port->spi_bus;
+				spi->chip_select= m_port->spi_cs;
+				if(spi->irq)
+					spi->irq=gpio_to_irq(m_port->int_gpio);
 				ret = mikrobus_spi_device_spi_device_register(spi);
 				if (ret) {
 					pr_err("failed to register SPI device\n");
