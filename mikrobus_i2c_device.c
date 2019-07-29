@@ -128,8 +128,13 @@ if (!port) {
 		if (strncmp(name, devices[i].name, I2C_NAME_SIZE) == 0) {
 			if (devices[i].i2c) {
 				i2c = devices[i].i2c;
-				if(i2c->irq)
+				if(i2c->irq) {
 					i2c->irq=gpio_to_irq(m_port->int_gpio);
+					if (i2c->irq < 0) {
+						pr_err("Could not get irq for gpio pin: %d",m_port->int_gpio);
+						return -EINVAL;
+					}
+				}
 				ret = mikrobus_i2c_device_register(i2c,m_port->i2c_bus);
 				if (ret) {
 					pr_err("failed to register I2C device\n");

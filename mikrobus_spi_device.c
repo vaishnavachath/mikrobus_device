@@ -193,8 +193,13 @@ static int __init mikrobus_spi_device_init(void)
 				spi = devices[i].spi;
 				spi->bus_num= m_port->spi_bus;
 				spi->chip_select= m_port->spi_cs;
-				if(spi->irq)
+				if(spi->irq) {
 					spi->irq=gpio_to_irq(m_port->int_gpio);
+					if (spi->irq < 0) {
+						pr_err("Could not get irq for gpio pin: %d",m_port->int_gpio);
+						return -EINVAL;
+					}
+				}
 				ret = mikrobus_spi_device_spi_device_register(spi);
 				if (ret) {
 					pr_err("failed to register SPI device\n");
