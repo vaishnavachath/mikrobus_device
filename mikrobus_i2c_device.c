@@ -19,19 +19,30 @@
 #include <linux/gpio.h>
 #include <linux/i2c.h>
 
-#include "mikrobus.h"
 #include "mikrobus_i2c.h"
 
 static struct i2c_client *i2c_device;
 
+//if custom == true , then name should correspond to the device driver name
 static char *name;
 module_param(name, charp, 0000);
 MODULE_PARM_DESC(name, "Device name (required).");
 
-static char *port;
-module_param(port, charp, 0000);
-MODULE_PARM_DESC(name, "Mikrobus port (required).");
+static unsigned int busno;
+module_param(busno, uint, 0000);
+MODULE_PARM_DESC(busno,"I2C Bus No to instantiate device");
 
+static unsigned short address;
+module_param(address, ushort, 0000);
+MODULE_PARM_DESC(address,"I2C Device Address");
+
+static unsigned int irq_gpio;
+module_param(irq_gpio, uint, 0000);
+MODULE_PARM_DESC(irq_gpio,"Interrupt GPIO Number");
+
+static bool custom;
+module_param(custom, bool, 0000);
+MODULE_PARM_DESC(custom, "Add a custom device");
 
 struct mikrobus_i2c_device {
 	char *name;
@@ -39,20 +50,6 @@ struct mikrobus_i2c_device {
 };
 
 static struct mikrobus_i2c_device devices[] = {
-	 {
-		.name = "rtc6",
-		.i2c = &(struct i2c_board_info) {
-			I2C_BOARD_INFO("mcp7941x", 0x6f),
-			.irq=-1,
-		}
-	},
-	{
-		.name = "weather",
-		.i2c = &(struct i2c_board_info) {
-			I2C_BOARD_INFO("bme280", 0x76),
-			.irq=-1,
-		}
-	},
 	{
 		.name = "mpu9dof",
 		.i2c = &(struct i2c_board_info) {
@@ -61,20 +58,21 @@ static struct mikrobus_i2c_device devices[] = {
 		}
 	},
 	{
-		.name = "techlab_accel",
+		.name = "custom",
 		.i2c = &(struct i2c_board_info) {
-			I2C_BOARD_INFO("mma8453", 0x1c),
-			.irq=1,
+			.type = "",
+			.addr = 0x00,
+			.irq = 1,
 		}
 	},
 };
 
 #ifdef MODULE
-static int mikrobus_i2c_device_register(struct i2c_board_info *i2c, uint8_t bus)
+static int mikrobus_i2c_device_register(struct i2c_board_info *i2c)
 {
 	struct i2c_adapter *i2c_adap;
 
-    i2c_adap = i2c_get_adapter(1);
+    i2c_adap = i2c_get_adapter(busno);
 
 	if (!i2c_adap) {
 		pr_err("i2c_busnum_to_adapter(%d) returned NULL\n",
@@ -92,14 +90,13 @@ static int mikrobus_i2c_device_register(struct i2c_board_info *i2c, uint8_t bus)
 #else
 static int mikrobus_i2c_device_register(struct i2c_board_info *i2c, uint8_t bus)
 {
-	return i2c_register_board_info(1,i2c, 1);
+	return i2c_register_board_info(busno,i2c, 1);
 }
 #endif
 
 static int __init mikrobus_i2c_device_init(void)
 {
 	struct i2c_board_info *i2c = NULL;
-	struct mikrobus_port *m_port = NULL;
 	bool found = false;
 	int i = 0;
 	int ret = 0;
@@ -113,29 +110,27 @@ static int __init mikrobus_i2c_device_init(void)
 #endif
 	}
 
-if (!port) {
+if (!busno) {
 #ifdef MODULE
-		pr_err("missing module parameter: 'port'\n");
+		pr_err("missing module parameter: 'busno'\n");
 		return -EINVAL;
 #else
 		return 0;
 #endif
 	}
 
-	m_port=get_mikrobus_port(port);
-
 	for (i = 0; i < ARRAY_SIZE(devices); i++) {
 		if (strncmp(name, devices[i].name, I2C_NAME_SIZE) == 0) {
 			if (devices[i].i2c) {
 				i2c = devices[i].i2c;
 				if(i2c->irq) {
-					i2c->irq=gpio_to_irq(m_port->int_gpio);
+					i2c->irq=gpio_to_irq(irq_gpio);
 					if (i2c->irq < 0) {
-						pr_err("Could not get irq for gpio pin: %d",m_port->int_gpio);
+						pr_err("Could not get irq for gpio pin: %d",irq_gpio);
 						return -EINVAL;
 					}
 				}
-				ret = mikrobus_i2c_device_register(i2c,m_port->i2c_bus);
+				ret = mikrobus_i2c_device_register(i2c);
 				if (ret) {
 					pr_err("failed to register I2C device\n");
 					return ret;
@@ -147,8 +142,21 @@ if (!port) {
 	}
 
 	if (!found) {
-		pr_err("device not supported: '%s'\n", name);
-		return -EINVAL;
+		if(!custom) {
+			pr_err("device not supported: '%s'\n", name);
+			return -EINVAL;
+		}
+		else {
+			i2c = devices[ARRAY_SIZE(devices)-1].i2c;
+			strlcpy(i2c->type, name,I2C_NAME_SIZE);
+			i2c->addr = address;
+			i2c->irq = gpio_to_irq(irq_gpio);
+			ret = mikrobus_i2c_device_register(i2c);
+				if (ret) {
+					pr_err("failed to register Custom I2C device\n");
+					return ret;
+				}
+		}
 	}
 	return 0;
 }
@@ -164,6 +172,6 @@ static void __exit mikrobus_i2c_device_exit(void)
 arch_initcall(mikrobus_i2c_device_init);
 module_exit(mikrobus_i2c_device_exit);
 
-MODULE_DESCRIPTION("Instantiate a Mikrobus device.");
+MODULE_DESCRIPTION("Instantiate a Mikrobus I2C device.");
 MODULE_AUTHOR("Vaishnav M A");
 MODULE_LICENSE("GPL");

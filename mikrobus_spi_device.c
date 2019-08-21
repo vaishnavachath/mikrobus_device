@@ -19,18 +19,35 @@
 #include <linux/gpio.h>
 #include <linux/spi/spi.h>
 
-#include "mikrobus.h"
 #include "mikrobus_spi.h"
 
 static struct spi_device *spi_device;
 
+//if custom == true , then name should correspond to the device driver name
 static char *name;
 module_param(name, charp, 0000);
 MODULE_PARM_DESC(name, "Device name (required).");
 
-static char *port;
-module_param(port, charp, 0000);
-MODULE_PARM_DESC(name, "Mikrobus port (required).");
+static unsigned int busno;
+module_param(busno, uint, 0000);
+MODULE_PARM_DESC(busno,"SPI Bus No to instantiate device");
+
+static unsigned short csno;
+module_param(csno, ushort, 0000);
+MODULE_PARM_DESC(csno,"SPI Bus Chip Select No.");
+
+static unsigned int irq_gpio;
+module_param(irq_gpio, uint, 0000);
+MODULE_PARM_DESC(irq_gpio,"Interrupt GPIO Number");
+
+static unsigned int max_speed;
+module_param(max_speed, uint, 0000);
+MODULE_PARM_DESC(max_speed,"Interrupt GPIO Number");
+
+static bool custom;
+module_param(custom, bool, 0000);
+MODULE_PARM_DESC(custom, "Add a custom device");
+
 
 
 struct mikrobus_spi_device {
@@ -59,6 +76,17 @@ static struct mikrobus_spi_device devices[] = {
 		.spi = &(struct spi_board_info) {
 			.modalias = "enc28j60",
 			.max_speed_hz = 16000000,
+			.mode = SPI_MODE_0,
+			.chip_select = 0,
+			.bus_num = 0,
+			.irq=1,
+		}
+	},
+	{
+		.name = "custom",
+		.spi = &(struct spi_board_info) {
+			.modalias = "",
+			.max_speed_hz = 0,
 			.mode = SPI_MODE_0,
 			.chip_select = 0,
 			.bus_num = 0,
@@ -110,7 +138,6 @@ static int mikrobus_spi_device_spi_device_register(struct spi_board_info *spi)
 static int __init mikrobus_spi_device_init(void)
 {
 	struct spi_board_info *spi = NULL;
-	struct mikrobus_port *m_port = NULL;
 	bool found = false;
 	int i = 0;
 	int ret = 0;
@@ -124,27 +151,33 @@ static int __init mikrobus_spi_device_init(void)
 #endif
 	}
 
-	if (!port) {
+	if (!busno) {
 #ifdef MODULE
-		pr_err("missing module parameter: 'port'\n");
+		pr_err("missing module parameter: 'busno'\n");
 		return -EINVAL;
 #else
 		return 0;
 #endif
 	}
 
-	m_port=get_mikrobus_port(port);
+	if (!csno) {
+#ifdef MODULE
+		csno=0;
+#else
+		return 0;
+#endif
+	}
 
 	for (i = 0; i < ARRAY_SIZE(devices); i++) {
 		if (strncmp(name, devices[i].name, SPI_NAME_SIZE) == 0) {
 			if (devices[i].spi) {
 				spi = devices[i].spi;
-				spi->bus_num= m_port->spi_bus;
-				spi->chip_select= m_port->spi_cs;
+				spi->bus_num= busno;
+				spi->chip_select= csno;
 				if(spi->irq) {
-					spi->irq=gpio_to_irq(m_port->int_gpio);
+					spi->irq=gpio_to_irq(irq_gpio);
 					if (spi->irq < 0) {
-						pr_err("Could not get irq for gpio pin: %d",m_port->int_gpio);
+						pr_err("Could not get irq for gpio pin: %d",0);
 						return -EINVAL;
 					}
 				}
@@ -160,8 +193,23 @@ static int __init mikrobus_spi_device_init(void)
 	}
 
 	if (!found) {
-		pr_err("device not supported: '%s'\n", name);
-		return -EINVAL;
+		if(!custom) {
+			pr_err("device not supported: '%s'\n", name);
+			return -EINVAL;
+		}
+		else {
+			spi = devices[ARRAY_SIZE(devices)-1].spi;
+			strlcpy(spi->modalias, name,SPI_NAME_SIZE);
+			spi->bus_num= busno;
+			spi->chip_select= csno;
+			spi->max_speed_hz= max_speed;
+			spi->irq= gpio_to_irq(irq_gpio);;
+			ret = mikrobus_spi_device_spi_device_register(spi);
+				if (ret) {
+					pr_err("failed to register Custom SPI device\n");
+					return ret;
+				}
+		}
 	}
 	return 0;
 }
