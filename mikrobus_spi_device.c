@@ -40,58 +40,6 @@ struct mikrobus_spi_device {
 
 static struct mikrobus_spi_device devices[] = {
 	 {
-		.name = "oledc",
-		.spi = &(struct spi_board_info) {
-			.modalias = "fb_ssd1351",
-			.max_speed_hz = 6000000,
-			.mode = SPI_MODE_0,
-			.chip_select = 0,
-			.bus_num = 0,
-			.irq=-1,
-			.platform_data = &(struct fbtft_platform_data) {
-				.bgr = false,
-				.rotate = 0,
-				.fps = 40,
-				.display = {
-					.buswidth = 8,
-					.backlight = 2,
-					.width = 128,
-					.height = 128,
-				},
-				.gpios = (const struct fbtft_gpio []) {
-					{ "reset", 89 },
-					{ "dc", 50 },
-				},
-			}
-		}
-	},
-	{
-		.name = "oledb",
-		.spi = &(struct spi_board_info) {
-			.modalias = "fb_ssd1306",
-			.max_speed_hz = 6000000,
-			.mode = SPI_MODE_0,
-			.chip_select = 0,
-			.bus_num = 0,			
-			.irq=-1,
-			.platform_data = &(struct fbtft_platform_data) {
-				.bgr = false,
-				.rotate = 0,
-				.fps = 40,
-				.display = {
-					.buswidth = 8,
-					.backlight = 2,
-					.width = 96,
-					.height = 39,
-				},
-				.gpios = (const struct fbtft_gpio []) {
-					{ "reset", 89 },
-					{ "dc", 50 },
-				},
-			}
-		}
-	},
-	{
 		.name = "microsd",
 		.spi = &(struct spi_board_info) {
 			.modalias = "mmc_spi",
